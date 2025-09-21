@@ -1,0 +1,17 @@
+Weekday Shift Plan,Unnamed: 1,Unnamed: 2,Unnamed: 3,Unnamed: 4,Unnamed: 5,Unnamed: 6,Unnamed: 7,Unnamed: 8,Unnamed: 9,TOTAL HOUR BLOCKS,48
+Shift,Shift Block,Start Time,End Time,Hours,Label,,,,,TOTAL NUMBER OF SHIFTS,4.0
+Day,Day 1,7,11,4,7 - 11,,,,,HOURS PER SHIFT,12.0
+Day,Day 2,11,15,4,11 - 15,,,,,TOTAL IN A WORK WEEK FOR 1 FTE,40.0
+Day,Evening 1,15,19,4,15 - 19,,,,,TOTAL AVAILABLE SHIFTS PER WORK WEEK,3.0
+Night,Evening 2,19,23,4,19 - 23,,,,,TARGET WORKED HOURS PER WEEK,36.0
+Night,Night 1,23,3,4,23 - 3,,,,,TOTAL WEEKS IN SHIFT CYCLE,6.0
+Night,Night 2,3,7,4,3 - 7,,,,,WEEKEND DAYS,12.0
+,,,,,,,,,,WEEKEND ROTATION,3.0
+Weekend Shift Plan,,,,,,,,,,TOTAL SHIFTS REQUIRED FOR FULL TIME,18.0
+Shift,Shift Block,Start Time,End Time,Hours,Label,,,,,TOTAL WEEKEND SHIFTS REQUIRED IN 1 PLANNING CYCLE,4.0
+Day,Day 1,7,11,4,7 - 11,,,,,,
+Day,Day 2,11,15,4,11 - 15,,,,,,
+Day,Evening 1,15,19,4,15 - 19,,,,,,
+Night,Evening 2,19,23,4,19 - 23,,,,,,
+Night,Night 1,23,3,4,23 - 3,,,,,,
+Night,Night 2,3,7,4,3 - 7,,,,,,

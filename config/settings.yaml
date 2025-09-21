@@ -1,0 +1,68 @@
+# =============================
+# Nash Analytics Season Rules
+# =============================
+# Define seasons by month and weekday
+# weekday: 0=Monday ... 6=Sunday
+
+seasons:
+  - months: [6, 7, 8]       # June, July, August
+    weekdays: [0,1,2,3,4,5,6]
+    season: High
+
+  - months: [12, 1]         # December, January
+    weekdays: [0,1,2,3,4,5,6]
+    season: Low
+
+  - months: [2,3,4,5,9,10,11]
+    weekdays: [0,1,2,3,4]   # Weekdays Mon–Fri
+    season: Medium
+
+  - months: [2,3,4,5,9,10,11]
+    weekdays: [5,6]         # Sat–Sun
+    season: Low
+
+
+# =============================
+# Shift Definitions
+# =============================
+# Define shifts by role (RN, NA, ED, etc.)
+# Each role can have different shift schedules.
+
+shifts:
+  RN:
+    - name: Day
+      start: "07:00"
+      end: "19:00"
+      hours: 12
+    - name: Night
+      start: "19:00"
+      end: "07:00"
+      hours: 12
+
+  NA:
+    - name: Day
+      start: "07:00"
+      end: "15:00"
+      hours: 8
+    - name: Evening
+      start: "15:00"
+      end: "23:00"
+      hours: 8
+    - name: Night
+      start: "23:00"
+      end: "07:00"
+      hours: 8
+
+  ED:   # Emergency Department
+    - name: Early
+      start: "06:00"
+      end: "14:00"
+      hours: 8
+    - name: Mid
+      start: "14:00"
+      end: "22:00"
+      hours: 8
+    - name: Night
+      start: "22:00"
+      end: "06:00"
+      hours: 8
