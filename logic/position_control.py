@@ -1,80 +1,70 @@
+from __future__ import annotations
 import pandas as pd
 
 
 def build_position_control(resources_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Normalize position control data (from Resource Input).
-    Uses 'Position' as Role, 'Unit FTEs' as FTEs, and 'Availibility' if present.
+    Normalize Resource Input (cols A–G) and aggregate available FTEs.
+    Output columns:
+      Department | Role | Shift | AvailableFTE
     """
     df = resources_df.copy()
-    df = df.rename(columns=lambda c: str(c).strip())
 
-    # Map headers
-    role_col = None
-    fte_col = None
-    avail_col = None
+    # Ensure required columns exist
+    for col in ["Department", "Role", "Shift"]:
+        if col not in df.columns:
+            df[col] = ""
+    if "FTE" not in df.columns:
+        df["FTE"] = 0.0
 
-    for c in df.columns:
-        lc = c.lower()
-        if lc in ("role", "position"):  # accept both
-            role_col = c
-        elif "fte" in lc and "unit" in lc:  # "Unit FTEs"
-            fte_col = c
-        elif "avail" in lc:  # matches "Availibility"
-            avail_col = c
+    # Missing shift → treat as 'All' (catch-all capacity)
+    df["Shift"] = df["Shift"].fillna("").replace("", "All")
 
-    if not role_col or not fte_col:
-        raise ValueError("Resource Input must contain Position/Role + Unit FTEs.")
-
-    out = df[[role_col, fte_col] + ([avail_col] if avail_col else [])].dropna(how="all")
-    out = out.rename(columns={role_col: "Role", fte_col: "FTEs"})
-    if avail_col:
-        out = out.rename(columns={avail_col: "Availability"})
-
-    # Keep only RN + NA
-    out = out[out["Role"].isin(["RN", "NA"])].reset_index(drop=True)
-
+    # Aggregate by Dept/Role/Shift
+    out = (
+        df.groupby(["Department", "Role", "Shift"], as_index=False)
+          .agg({"FTE": "sum"})
+          .rename(columns={"FTE": "AvailableFTE"})
+    )
     return out
 
-import pandas as pd
 
-def compare_plan_vs_resources(plan_df: pd.DataFrame, resources_df: pd.DataFrame) -> pd.DataFrame:
+def compare_plan_vs_resources(plan_df: pd.DataFrame, pos_ctrl_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Compare staffing plan (needed staff) vs available FTEs from Resource Input.
-    Returns a DataFrame with Gap, Shortage, Surplus.
+    Compare staffing plan vs available FTEs:
+      • Plan is per Date/Hour/Dept/Role/Shift (granular).
+      • Resources are Dept/Role/Shift aggregates (with 'All' fallback).
+    Output columns:
+      Date | Hour | Department | Role | Shift | Needed | AvailableFTE | Gap | Shortage | Surplus
     """
-    # Normalize resource column names
-    ren_map = {c.lower().strip(): c for c in resources_df.columns}
-    fte_col = None
-    for cand in ["unit ftes", "unit fte", "ftes", "fte"]:
-        if cand in ren_map:
-            fte_col = ren_map[cand]
-            break
-    if not fte_col:
-        raise ValueError(f"Resource Input is missing an FTE column (saw: {list(resources_df.columns)})")
-
-    # Aggregate planned staff needed
-    needed = (
-        plan_df.groupby(["Date", "Role"], as_index=False)
-        .agg({"Staff_Needed": "sum"})
-        .rename(columns={"Staff_Needed": "Needed"})
+    # Aggregate needed staff by Date/Hour/Dept/Role/Shift
+    need = (
+        plan_df.groupby(["Date", "Hour", "Department", "Role", "Shift"], as_index=False)
+               .agg({"Staff_Needed": "sum"})
+               .rename(columns={"Staff_Needed": "Needed"})
     )
 
-    # Aggregate available staff by Role
-    available = (
-        resources_df.groupby("Role", as_index=False)
-        .agg({fte_col: "sum"})
-        .rename(columns={fte_col: "Available"})
-    )
+    # Exact merge first
+    comp = need.merge(pos_ctrl_df, on=["Department", "Role", "Shift"], how="left")
 
-    # Merge
-    comp = needed.merge(available, on="Role", how="left").fillna(0)
+    # Fallback: if no exact match, pull from 'All' shift for that Dept/Role
+    mask = comp["AvailableFTE"].isna()
+    if mask.any():
+        fallback = (
+            pos_ctrl_df[pos_ctrl_df["Shift"].eq("All")]
+            [["Department", "Role", "AvailableFTE"]]
+            .rename(columns={"AvailableFTE": "AvailableFTE_All"})
+        )
+        comp = comp.merge(fallback, on=["Department", "Role"], how="left")
+        comp.loc[mask, "AvailableFTE"] = comp.loc[mask, "AvailableFTE_All"]
+        comp = comp.drop(columns=["AvailableFTE_All"])
 
-    # Calculate Gap, Shortage, Surplus
-    comp["Gap"] = comp["Available"] - comp["Needed"]
-    comp["Shortage"] = (comp["Needed"] - comp["Available"]).clip(lower=0)
-    comp["Surplus"] = (comp["Available"] - comp["Needed"]).clip(lower=0)
+    # Replace any remaining NaNs with 0
+    comp["AvailableFTE"] = comp["AvailableFTE"].fillna(0)
+
+    # Staffing balance
+    comp["Gap"]      = comp["AvailableFTE"] - comp["Needed"]
+    comp["Shortage"] = (comp["Needed"] - comp["AvailableFTE"]).clip(lower=0)
+    comp["Surplus"]  = (comp["AvailableFTE"] - comp["Needed"]).clip(lower=0)
 
     return comp
-
-

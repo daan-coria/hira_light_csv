@@ -1,33 +1,30 @@
+from __future__ import annotations
 import pandas as pd
-from ingestion.excel_v010 import load_census_from_excel
-from ingestion.seasons_loader import load_season_rules, apply_nash_seasonality
 
+REQUIRED = {"date", "hour", "census"}
 
-def _label_from_factor(factor: float) -> str:
+def load_census_minimal(excel_path: str, sheet_name: str = "Census Input") -> pd.DataFrame:
     """
-    Derive a season label from a numeric factor.
-    - Factor < 1.0  -> "Low"
-    - Factor == 1.0 -> "Medium"
-    - Factor > 1.0  -> "High"
+    Read only the external census source with these required columns:
+      - Date (date or datetime)
+      - Hour (0..23)
+      - Census (float/int)
+    Output columns: Date (date), Hour (int), Census (float)
     """
-    if pd.isna(factor):
-        return "Medium"
-    if factor < 1.0:
-        return "Low"
-    if factor > 1.0:
-        return "High"
-    return "Medium"
+    raw = pd.read_excel(excel_path, sheet_name=sheet_name)
+    cols = {c.strip().lower(): c for c in raw.columns}
+    missing = [c for c in REQUIRED if c not in cols]
+    if missing:
+        raise ValueError(f"Census sheet must contain {sorted(REQUIRED)}. Found: {list(raw.columns)}")
 
+    df = raw[[cols["date"], cols["hour"], cols["census"]]].copy()
+    df.columns = ["Date", "Hour", "Census"]
 
-def load_census_with_season(
-    excel_path: str,
-    sheet_name: str = "Census Input",
-    settings_path: str = "config/settings.yaml"
-) -> pd.DataFrame:
-    """
-    Load census from Excel and enrich with Nash Analytics seasonality.
-    Adds both SeasonLabel (Low/Medium/High) and SeasonFactor (numeric).
-    """
-    census_df = load_census_from_excel(excel_path, sheet_name=sheet_name)
-    rules = load_season_rules(settings_path)
-    return apply_nash_seasonality(census_df, rules)
+    df["Date"]   = pd.to_datetime(df["Date"], errors="coerce").dt.date
+    df["Hour"]   = pd.to_numeric(df["Hour"], errors="coerce").astype("Int64")
+    df["Census"] = pd.to_numeric(df["Census"], errors="coerce")
+    df = df.dropna(subset=["Date", "Hour", "Census"]).reset_index(drop=True)
+
+    # Keep 0..23 only
+    df = df[(df["Hour"] >= 0) & (df["Hour"] <= 23)].reset_index(drop=True)
+    return df

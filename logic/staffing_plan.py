@@ -1,77 +1,41 @@
+from __future__ import annotations
 import math
 import pandas as pd
 
+SEASON_KEYS = {"High": "Ratio_High", "Medium": "Ratio_Medium", "Low": "Ratio_Low"}
 
-def staff_needed(census: float, ratio: float) -> int:
-    """
-    Standard staffing formula:
-        Staff Needed = ceil(Census / Ratio)
-    """
+def _ceil_div(census: float, ratio: float) -> int:
     if pd.isna(census) or pd.isna(ratio) or ratio <= 0:
         return 0
-    return math.ceil(census / ratio)
+    return int(math.ceil(float(census) / float(ratio)))
 
-
-def generate_staffing_plan(
+def build_staffing_plan(
     census_df: pd.DataFrame,
-    rules_df: pd.DataFrame
+    grid_df: pd.DataFrame,
+    season: str = "Medium",
 ) -> pd.DataFrame:
     """
-    Generate staffing plan with optional season-based ratios.
-
-    Parameters
-    ----------
-    census_df : DataFrame
-        Must contain ["Date", "Census"] and optionally ["SeasonLabel"].
-    rules_df : DataFrame
-        Can be:
-          - Wide format with columns ["Role", "Low", "Medium", "High"]
-          - Simple format with ["Role", "Ratio"]
-
-    Returns
-    -------
-    DataFrame with columns:
-      [Date, Role, SeasonLabel, Census, RatioUsed, Staff_Needed]
+    Build staffing plan:
+      Inputs: Census (Date, Hour, Census) + Staffing Grid (Dept/Role/Shift + season ratios).
+      Season is selected manually and chooses which ratio column to use.
+    Output: Date, Hour, Department, Role, Shift, Census, RatioUsed, Staff_Needed
     """
-    rules_df = rules_df.rename(columns=lambda c: str(c).strip())
+    season = str(season).title()
+    if season not in SEASON_KEYS:
+        raise ValueError(f"Season must be one of {list(SEASON_KEYS)}.")
+    ratio_col = SEASON_KEYS[season]
+    if ratio_col not in grid_df.columns:
+        raise ValueError(f"Staffing Grid missing {ratio_col}")
 
-    # Detect if season-specific ratios exist
-    has_season_cols = any(col in rules_df.columns for col in ["Low", "Medium", "High"])
+    # cartesian product: (Date,Hour,Census) × (Dept,Role,Shift)
+    census_df = census_df[["Date", "Hour", "Census"]].copy()
+    rules = grid_df[["Department", "Role", "Shift", ratio_col]].copy().rename(columns={ratio_col: "RatioUsed"})
 
-    plan_records = []
-    for _, c_row in census_df.iterrows():
-        date = c_row.get("Date")
-        census_val = c_row.get("Census")
-        season = c_row.get("SeasonLabel", None)
+    census_df["key"] = 1
+    rules["key"] = 1
+    merged = census_df.merge(rules, on="key", how="inner").drop(columns=["key"])
 
-        for _, r_row in rules_df.iterrows():
-            role = str(r_row["Role"]).strip()
+    merged["Staff_Needed"] = merged.apply(lambda r: _ceil_div(r["Census"], r["RatioUsed"]), axis=1)
 
-            if has_season_cols and season in ["Low", "Medium", "High"]:
-                ratio = r_row.get(season, pd.NA)
-            else:
-                ratio = r_row.get("Ratio", pd.NA)
-
-            needed = staff_needed(float(census_val) if census_val is not None else 0.0,
-                                  float(ratio) if ratio is not None else 0.0)
-
-            plan_records.append({
-                "Date": date,
-                "Role": role,
-                "SeasonLabel": season if season else "N/A",
-                "Census": census_val,
-                "RatioUsed": ratio,
-                "Staff_Needed": needed,
-            })
-
-    return pd.DataFrame(plan_records)
-
-
-def build_staffing_plan_from_rules(
-    census_df: pd.DataFrame,
-    rules_df: pd.DataFrame
-) -> pd.DataFrame:
-    """
-    Wrapper: build plan directly from census + rules.
-    """
-    return generate_staffing_plan(census_df, rules_df)
+    cols = ["Date", "Hour", "Department", "Role", "Shift", "Census", "RatioUsed", "Staff_Needed"]
+    return merged[cols].sort_values(["Date", "Hour", "Department", "Role", "Shift"]).reset_index(drop=True)
