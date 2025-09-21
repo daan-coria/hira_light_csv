@@ -43,18 +43,28 @@ def compare_plan_vs_resources(plan_df: pd.DataFrame, resources_df: pd.DataFrame)
     Compare staffing plan (needed staff) vs available FTEs from Resource Input.
     Returns a DataFrame with Gap, Shortage, Surplus.
     """
-    # Aggregate planned staff needed by Role + Date
+    # Normalize resource column names
+    ren_map = {c.lower().strip(): c for c in resources_df.columns}
+    fte_col = None
+    for cand in ["unit ftes", "unit fte", "ftes", "fte"]:
+        if cand in ren_map:
+            fte_col = ren_map[cand]
+            break
+    if not fte_col:
+        raise ValueError(f"Resource Input is missing an FTE column (saw: {list(resources_df.columns)})")
+
+    # Aggregate planned staff needed
     needed = (
         plan_df.groupby(["Date", "Role"], as_index=False)
         .agg({"Staff_Needed": "sum"})
         .rename(columns={"Staff_Needed": "Needed"})
     )
 
-    # Aggregate available FTEs by Role (ignoring date, assumed static capacity)
+    # Aggregate available staff by Role
     available = (
         resources_df.groupby("Role", as_index=False)
-        .agg({"Unit FTEs": "sum"})
-        .rename(columns={"Unit FTEs": "Available"})
+        .agg({fte_col: "sum"})
+        .rename(columns={fte_col: "Available"})
     )
 
     # Merge
@@ -66,4 +76,5 @@ def compare_plan_vs_resources(plan_df: pd.DataFrame, resources_df: pd.DataFrame)
     comp["Surplus"] = (comp["Available"] - comp["Needed"]).clip(lower=0)
 
     return comp
+
 
