@@ -55,8 +55,8 @@ if uploaded_file:
             )
 
     # --- KPIs for Summary ---
-    total_shortages = comp_df["Gap"].apply(lambda x: x if isinstance(x, (int, float)) and x < 0 else 0).sum()
-    total_surpluses = comp_df["Gap"].apply(lambda x: x if isinstance(x, (int, float)) and x > 0 else 0).sum()
+    total_shortages = comp_df["Shortage"].sum()
+    total_surpluses = comp_df["Surplus"].sum()
     total_assigned = schedule_df["Assigned"].sum() if "Assigned" in schedule_df.columns else 0
     unique_dates = plan_df["Date"].nunique() if "Date" in plan_df.columns else 0
 
@@ -94,13 +94,13 @@ if uploaded_file:
     if "Date" in comp_df.columns and "Gap" in comp_df.columns:
         st.subheader("📉 Shortages vs Surpluses Over Time")
 
-        gap_over_time = comp_df.groupby("Date", as_index=False)["Gap"].sum()
-        gap_over_time["Shortages"] = gap_over_time["Gap"].apply(lambda x: x if x < 0 else 0)
-        gap_over_time["Surpluses"] = gap_over_time["Gap"].apply(lambda x: x if x > 0 else 0)
-
+        gap_over_time = (
+            comp_df.groupby("Date", as_index=False)[["Shortage", "Surplus"]].sum()
+        )
+        
         gap_melted = gap_over_time.melt(
             id_vars="Date",
-            value_vars=["Shortages", "Surpluses"],
+            value_vars=["Shortage", "Surplus"],
             var_name="Type",
             value_name="Count"
         )

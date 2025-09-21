@@ -36,16 +36,34 @@ def build_position_control(resources_df: pd.DataFrame) -> pd.DataFrame:
 
     return out
 
+import pandas as pd
 
 def compare_plan_vs_resources(plan_df: pd.DataFrame, resources_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Compare staffing plan vs available FTEs from Resource Input.
-    Returns table with gaps/surpluses.
+    Compare staffing plan (needed staff) vs available FTEs from Resource Input.
+    Returns a DataFrame with Gap, Shortage, Surplus.
     """
-    summary = plan_df.groupby(["Date", "Role"], as_index=False)["Staff_Needed"].sum()
+    # Aggregate planned staff needed by Role + Date
+    needed = (
+        plan_df.groupby(["Date", "Role"], as_index=False)
+        .agg({"Staff_Needed": "sum"})
+        .rename(columns={"Staff_Needed": "Needed"})
+    )
 
-    merged = summary.merge(resources_df, on="Role", how="left")
-    merged["FTEs"] = merged["FTEs"].fillna(0)
-    merged["Gap"] = merged["FTEs"] - merged["Staff_Needed"]
+    # Aggregate available FTEs by Role (ignoring date, assumed static capacity)
+    available = (
+        resources_df.groupby("Role", as_index=False)
+        .agg({"Unit FTEs": "sum"})
+        .rename(columns={"Unit FTEs": "Available"})
+    )
 
-    return merged
+    # Merge
+    comp = needed.merge(available, on="Role", how="left").fillna(0)
+
+    # Calculate Gap, Shortage, Surplus
+    comp["Gap"] = comp["Available"] - comp["Needed"]
+    comp["Shortage"] = (comp["Needed"] - comp["Available"]).clip(lower=0)
+    comp["Surplus"] = (comp["Available"] - comp["Needed"]).clip(lower=0)
+
+    return comp
+
