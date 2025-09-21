@@ -53,7 +53,7 @@ shifts:
       end: "07:00"
       hours: 8
 
-  ED:   # Emergency Department
+  ED:   
     - name: Early
       start: "06:00"
       end: "14:00"

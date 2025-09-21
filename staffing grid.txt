@@ -1,0 +1,39 @@
+staffing grid 
+staffing plan
+just the 2 inputs value must be shown
+
+gap summary
+
+census data = external
+
+everything else is input data = 
+
+input staffing grid first blue tables
+
+each dep has diff rules/ diff associations 
+
+1 place for all the rules, then go to staffing configuration
+that add the 
+
+staffing plan = census input and shift configuration from staffing grid 
+
+season is the only one selected manually on Staffin plan 
+
+position control: lookup / where everything vomes together to tell them FTE available and what they dont have. By shift what they can hire or what not 
+
+
+shifts input on left are manual input by resources:
+
+
+Resource input: destination format A-G is what we'll try to extract 
+
+census input: waiting on their census data, it was combined into just one shift. THIS IS A DATA SOURCE 
+
+
+APP SHOULD ONLY USE:
+RESOURCE INPUT INITIAL COLUMNS AND CENSUS INPUT DATE/HOUR/ CENSUS POINT 
+
+RESOURCE INPUT IS MODIFIABLE 
+
+
+
