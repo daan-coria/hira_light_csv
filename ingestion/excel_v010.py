@@ -37,29 +37,39 @@ def _make_unique(names: List[str]) -> List[str]:
 
 def load_census_from_excel(excel_path: str, sheet_name: str = "Census Input") -> pd.DataFrame:
     """
-    Parses 'Census Input'.
+    Parses 'Census Input' with flexible header detection.
     Canonical output: Date (datetime64), Hour (int), Census (float)
     """
-    raw = pd.read_excel(excel_path, sheet_name=sheet_name)
+    raw = pd.read_excel(excel_path, sheet_name=sheet_name, header=None)
+
+    header_row = None
+    for i in range(min(10, raw.shape[0])):  # scan first 10 rows
+        row_vals = [str(x).strip().lower() for x in raw.iloc[i].tolist() if pd.notna(x)]
+        if any("census" in v for v in row_vals) and any("date" in v or "day" in v for v in row_vals):
+            header_row = i
+            break
+
+    if header_row is None:
+        raise ValueError("Could not detect header row in Census Input sheet")
+
+    # Promote that row to header
+    df = pd.read_excel(excel_path, sheet_name=sheet_name, header=header_row)
 
     # Normalize column names
-    cols = {c.strip().lower().replace(" ", ""): c for c in raw.columns if isinstance(c, str)}
+    cols = {c.strip().lower().replace(" ", ""): c for c in df.columns if isinstance(c, str)}
 
-    # Detect date column
     date_col = None
     for cand in ["date", "projecteddate", "day"]:
         if cand in cols:
             date_col = cols[cand]
             break
 
-    # Detect hour column
     hour_col = None
     for cand in ["hour", "time"]:
         if cand in cols:
             hour_col = cols[cand]
             break
 
-    # Detect census column
     census_col = None
     for cand in ["census", "projectedcensus", "originaladtcensus"]:
         if cand in cols:
@@ -68,11 +78,12 @@ def load_census_from_excel(excel_path: str, sheet_name: str = "Census Input") ->
 
     if not date_col or not census_col:
         raise ValueError(
-            f"Census Input must contain Date and Census (optionally Hour). Found: {list(raw.columns)}"
+            f"Census Input must contain Date and Census. Found: {list(df.columns)}"
         )
 
     # Extract relevant data
-    df = raw[[c for c in [date_col, hour_col, census_col] if c is not None]].copy()
+    keep = [c for c in [date_col, hour_col, census_col] if c is not None]
+    df = df[keep].copy()
 
     # Rename to canonical
     rename_map = {}
@@ -81,84 +92,18 @@ def load_census_from_excel(excel_path: str, sheet_name: str = "Census Input") ->
     if census_col: rename_map[census_col] = "Census"
     df = df.rename(columns=rename_map)
 
-    # Clean types
+    # Coerce types
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     if "Hour" in df.columns:
         df["Hour"] = pd.to_numeric(df["Hour"], errors="coerce").fillna(0).astype(int)
     else:
-        df["Hour"] = 0  # fallback: single shift
+        df["Hour"] = 0
     df["Census"] = pd.to_numeric(df["Census"], errors="coerce")
 
-    # Drop invalid rows
+    # Drop blanks
     df = df.dropna(subset=["Date", "Census"]).reset_index(drop=True)
 
     return df[["Date", "Hour", "Census"]]
-
-
-# ========= Staffing Grid =========
-
-def load_staffing_rules_from_excel(excel_path: str, sheet_name: str = "Staffing Grid") -> pd.DataFrame:
-    """
-    Parses 'Staffing Grid' (blue tables).
-    Expected columns (flexible names):
-      Department | Role | Shift | Ratio (or Ratio_High/Medium/Low)
-
-    Output columns:
-      Department, Role, Shift, Ratio_High, Ratio_Medium, Ratio_Low
-    """
-    df = pd.read_excel(excel_path, sheet_name=sheet_name, header=0)
-    lower = {c.strip().lower(): c for c in df.columns}
-
-    dept_col  = next((lower[k] for k in ["department", "dept", "cost center", "costcenter"] if k in lower), None)
-    role_col  = next((lower[k] for k in ["role", "position", "job", "jobtitle"] if k in lower), None)
-    shift_col = next((lower[k] for k in ["shift", "shiftname"] if k in lower), None)
-
-    ratio_high   = next((lower[k] for k in ["ratio_high", "high"] if k in lower), None)
-    ratio_medium = next((lower[k] for k in ["ratio_medium", "medium"] if k in lower), None)
-    ratio_low    = next((lower[k] for k in ["ratio_low", "low"] if k in lower), None)
-    ratio_single = next((lower[k] for k in ["ratio", "staff ratio"] if k in lower), None)
-
-    if not (dept_col and role_col and shift_col):
-        raise ValueError("Staffing Grid must contain Department, Role, Shift and at least one ratio column.")
-
-    out = pd.DataFrame({
-        "Department": df[dept_col].astype(str).str.strip(),
-        "Role":       df[role_col].astype(str).str.strip(),
-        "Shift":      df[shift_col].astype(str).str.strip(),
-    })
-
-    def _num(x): return pd.to_numeric(x, errors="coerce")
-
-    if ratio_single:
-        out["Ratio_High"]   = _num(df[ratio_single])
-        out["Ratio_Medium"] = _num(df[ratio_single])
-        out["Ratio_Low"]    = _num(df[ratio_single])
-    else:
-        out["Ratio_High"]   = _num(df[ratio_high]) if ratio_high else np.nan
-        out["Ratio_Medium"] = _num(df[ratio_medium]) if ratio_medium else np.nan
-        out["Ratio_Low"]    = _num(df[ratio_low]) if ratio_low else np.nan
-
-    return out.dropna(subset=["Department", "Role", "Shift"]).reset_index(drop=True)
-
-
-# ========= Shifts Input (optional/manual) =========
-
-def load_shifts_from_excel(excel_path: str, sheet_name: str = "Shifts Input") -> pd.DataFrame:
-    """
-    Parses 'Shifts Input' if present.
-    Returns columns: Shift, Start, End, Hours, Label
-    """
-    try:
-        df = pd.read_excel(excel_path, sheet_name=sheet_name, header=0)
-    except Exception:
-        return pd.DataFrame(columns=["Shift", "Start", "End", "Hours", "Label"])
-
-    keep = [c for c in df.columns if c.strip().lower() in {"shift", "start", "end", "hours", "label"}]
-    if not keep:
-        return pd.DataFrame(columns=["Shift", "Start", "End", "Hours", "Label"])
-    df = df[keep].copy()
-    df.columns = [c.strip().title() for c in df.columns]
-    return df.dropna(subset=["Shift"]).reset_index(drop=True)
 
 
 # ========= Resource Input (A–G only) =========
@@ -190,3 +135,37 @@ def load_resources_from_excel(excel_path: str, sheet_name: str = "Resource Input
     if end_col:   df["End"]        = pd.to_numeric(raw[end_col], errors="coerce")
 
     return df.dropna(how="all").reset_index(drop=True)
+
+def load_staffing_rules_from_excel(excel_path: str, sheet_name: str = "Staffing Grid") -> pd.DataFrame:
+    """
+    Parses Staffing Grid and extracts Department, Role, Shift and seasonal ratios.
+    Expects columns like: Department, Role, Shift, Ratio_High, Ratio_Medium, Ratio_Low
+    """
+    raw = pd.read_excel(excel_path, sheet_name=sheet_name, header=0)
+
+    # Clean column names
+    raw.columns = [str(c).strip() for c in raw.columns]
+
+    required = {"Department", "Role", "Shift", "Ratio_High", "Ratio_Medium", "Ratio_Low"}
+    missing = required - set(raw.columns)
+    if missing:
+        raise ValueError(f"Staffing Grid missing required columns: {missing}")
+
+    return raw[list(required)]
+
+def load_shifts_from_excel(excel_path: str, sheet_name: str = "Shifts Input") -> pd.DataFrame:
+    """
+    Parses 'Shifts Input' into a clean DataFrame.
+    Expected columns: Department, Role, Shift, Start, End, Hours
+    """
+    df = pd.read_excel(excel_path, sheet_name=sheet_name, header=0)
+
+    # Clean column names
+    df.columns = [str(c).strip() for c in df.columns]
+
+    required = {"Department", "Role", "Shift", "Start", "End", "Hours"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Shifts Input missing required columns: {missing}")
+
+    return df[list(required)]
