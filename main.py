@@ -1,5 +1,6 @@
 from pathlib import Path
 import pandas as pd
+import altair as alt
 from datetime import datetime
 
 from ingestion.excel_v010 import (

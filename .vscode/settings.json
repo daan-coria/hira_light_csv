@@ -4,6 +4,9 @@
         "autofit",
         "availibility",
         "EFCE",
-        "sheetnames"
+        "officedocument",
+        "openxmlformats",
+        "sheetnames",
+        "spreadsheetml"
     ]
 }
