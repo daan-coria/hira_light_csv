@@ -218,7 +218,14 @@ if uploaded_file:
     with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
         summary_df.to_excel(writer, sheet_name="Summary", index=False)
         plan_df.to_excel(writer, sheet_name="Staffing Plan", index=False)
-        comp_df.to_excel(writer, sheet_name="Staffing vs Resources", index=False)
+
+        # Ensure comp_df includes Shortage/Surplus
+        comp_export = comp_df.copy()
+        if not {"Shortage", "Surplus"}.issubset(comp_export.columns):
+            comp_export["Shortage"] = (comp_export["Needed"] - comp_export["Available"]).clip(lower=0)
+            comp_export["Surplus"] = (comp_export["Available"] - comp_export["Needed"]).clip(lower=0)
+
+        comp_export.to_excel(writer, sheet_name="Staffing vs Resources", index=False)
         schedule_df.to_excel(writer, sheet_name="Staffing Schedule", index=False)
 
     with open(out_path, "rb") as f:
